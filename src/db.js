@@ -15,7 +15,14 @@ function openDb() {
 
 async function initDb(db) {
   const schema = fs.readFileSync(schemaPath, "utf-8");
-  await db.query(schema);
+  const statements = schema
+    .split(";")
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+
+  for (const statement of statements) {
+    await db.query(statement);
+  }
 }
 
 module.exports = {

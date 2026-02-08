@@ -21,10 +21,9 @@ async function renderSummary(req, res) {
       `SELECT b.id, b.title, b.author,
               COUNT(ub.id) as entries_count,
               COALESCE(SUM(ub.rank), 0) as rank_sum,
-              ((totals.total_users - COUNT(ub.id)) * 11 + COALESCE(SUM(ub.rank), 0)) as rank_score
+              (((SELECT COUNT(*) FROM users) - COUNT(ub.id)) * 11 + COALESCE(SUM(ub.rank), 0)) as rank_score
        FROM books b
        JOIN user_books ub ON ub.book_id = b.id
-       CROSS JOIN (SELECT COUNT(*) as total_users FROM users) totals
        GROUP BY b.id
        HAVING COUNT(ub.id) >= 1
        ORDER BY rank_score ASC, b.title ASC`
@@ -44,6 +43,7 @@ async function renderSummary(req, res) {
       error: null
     });
   } catch (err) {
+    console.error("Failed to load summary", err);
     res.render("summary", {
       summary: [],
       totals: { books: 0, entries: 0, raters: 0 },
