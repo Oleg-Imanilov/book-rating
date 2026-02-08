@@ -22,20 +22,54 @@ body {
 
 .header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   margin-bottom: 16px;
 }
 
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.header-title {
+  justify-content: flex-start;
+}
+
+.header nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+}
+
+.nav-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.nav-right {
+  margin-left: auto;
+  justify-content: flex-end;
+}
+
 .header nav a {
-  margin-left: 12px;
+  margin-left: 0;
   text-decoration: none;
   color: #2563eb;
 }
 
 .inline-form {
   display: inline-block;
-  margin-left: 12px;
+  margin-left: 0;
 }
 
 .inline-actions {
@@ -49,7 +83,7 @@ body {
   padding: 4px 8px;
   border-radius: 999px;
   font-size: 0.85rem;
-  margin-right: 8px;
+  margin-right: 0;
 }
 
 .card {
