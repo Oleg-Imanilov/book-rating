@@ -1,13 +1,15 @@
 const path = require("path");
 const express = require("express");
 const session = require("express-session");
-const { openDb, initDb } = require("./db");
+const { openDb, initDb, getDataDir } = require("./db");
+const SQLiteStore = require("connect-sqlite3")(session);
 const authRoutes = require("./routes/auth");
 const bookRoutes = require("./routes/books");
 const meRoutes = require("./routes/me");
 const summaryRoutes = require("./routes/summary");
 
 const app = express();
+const isProduction = process.env.NODE_ENV === "production";
 
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
@@ -16,12 +18,25 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+app.set("trust proxy", 1);
+
+const sessionStore = new SQLiteStore({
+  dir: getDataDir(),
+  db: "sessions.sqlite",
+  concurrentDB: true
+});
+
 app.use(
   session({
-    secret: "dev-secret-change-me",
+    secret: process.env.SESSION_SECRET || "dev-secret-change-me",
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true }
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isProduction
+    },
+    store: sessionStore
   })
 );
 
