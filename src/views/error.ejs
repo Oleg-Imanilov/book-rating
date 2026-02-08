@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= title %> — Books Rating</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <%- include("partials/header", {
+        title,
+        nav: { books: true, summary: true, login: true, register: true, logout: true }
+      }) %>
+
+      <section class="card">
+        <p><%= message %></p>
+      </section>
+    </main>
+  </body>
+</html>

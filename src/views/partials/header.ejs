@@ -1,0 +1,34 @@
+<header class="header">
+  <h1><%= title %></h1>
+  <nav>
+    <% if (nav && nav.home) { %>
+    <a href="/">Home</a>
+    <% } %>
+    <% if (nav && nav.books) { %>
+    <a href="/books">Books</a>
+    <% } %>
+    <% if (nav && nav.summary) { %>
+    <a href="/summary">Summary</a>
+    <% } %>
+    <% if (nav && nav.me) { %>
+    <a href="/me">My Top 10</a>
+    <% } %>
+    <% if (currentUser) { %>
+    <% if (nav && nav.authStatus) { %>
+    <span class="chip">Signed in as <strong><%= currentUser.username %></strong></span>
+    <% } %>
+    <% if (nav && nav.logout) { %>
+    <form method="post" action="/logout" class="inline-form">
+      <button type="submit">Logout</button>
+    </form>
+    <% } %>
+    <% } else { %>
+    <% if (nav && nav.login) { %>
+    <a href="/login">Login</a>
+    <% } %>
+    <% if (nav && nav.register) { %>
+    <a href="/register">Register</a>
+    <% } %>
+    <% } %>
+  </nav>
+</header>

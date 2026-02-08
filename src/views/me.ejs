@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Top 10 — Books Rating</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <%- include("partials/header", {
+        title: "My Top 10",
+        nav: { books: true, summary: true, logout: true }
+      }) %>
+
+      <% if (error) { %>
+      <div class="alert"><%= error %></div>
+      <% } %>
+
+      <% if (message) { %>
+      <div class="alert success"><%= message %></div>
+      <% } %>
+
+      <section class="card">
+        <h2>Select existing book</h2>
+        <form method="post" action="/me/list" class="row">
+          <select name="book_id" required>
+            <option value="">Select a book</option>
+            <% books.forEach((book) => { %>
+            <option value="<%= book.id %>"><%= book.title %> — <%= book.author %></option>
+            <% }) %>
+          </select>
+          <button type="submit">Add</button>
+        </form>
+        <div class="divider"></div>
+        <h3>Add a new book</h3>
+        <form method="post" action="/me/new-book" class="grid">
+          <label>
+            Title
+            <input name="title" required />
+          </label>
+          <label>
+            Author
+            <input name="author" required />
+          </label>
+          <button type="submit">Add New</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Your list</h2>
+        <% if (!list.length) { %>
+        <p>No entries yet.</p>
+        <% } else { %>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th></th>
+              <th>Book</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <% list.forEach((item, index) => { %>
+            <tr class="draggable-row" draggable="true" data-id="<%= item.id %>">
+              <td class="index-cell"><%= index + 1 %></td>
+              <td class="drag-cell"><span class="drag-handle" aria-label="Drag to reorder">↕</span></td>
+              <td><%= item.title %> — <%= item.author %></td>
+              <td>
+                <form method="post" action="/me/list/<%= item.id %>/delete">
+                  <button type="submit" class="danger">Remove</button>
+                </form>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% } %>
+      </section>
+    </main>
+    <script>
+      const tableBody = document.querySelector("tbody");
+      if (tableBody) {
+        let draggingRow = null;
+
+        const updateIndexes = () => {
+          tableBody.querySelectorAll(".index-cell").forEach((cell, index) => {
+            cell.textContent = index + 1;
+          });
+        };
+
+        const sendOrder = async () => {
+          const order = Array.from(tableBody.querySelectorAll(".draggable-row")).map((row) => row.dataset.id);
+          try {
+            await fetch("/me/list/reorder", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ order })
+            });
+          } catch (error) {
+            // ignore; UI already updated
+          }
+        };
+
+        tableBody.addEventListener("dragstart", (event) => {
+          const row = event.target.closest(".draggable-row");
+          if (!row) return;
+          draggingRow = row;
+          row.classList.add("dragging");
+          event.dataTransfer.effectAllowed = "move";
+        });
+
+        tableBody.addEventListener("dragend", () => {
+          if (draggingRow) draggingRow.classList.remove("dragging");
+          draggingRow = null;
+        });
+
+        tableBody.addEventListener("dragover", (event) => {
+          event.preventDefault();
+          const row = event.target.closest(".draggable-row");
+          if (!row || row === draggingRow) return;
+          const rect = row.getBoundingClientRect();
+          const shouldInsertBefore = event.clientY < rect.top + rect.height / 2;
+          tableBody.insertBefore(draggingRow, shouldInsertBefore ? row : row.nextSibling);
+        });
+
+        tableBody.addEventListener("drop", async (event) => {
+          event.preventDefault();
+          updateIndexes();
+          await sendOrder();
+        });
+      }
+    </script>
+  </body>
+</html>

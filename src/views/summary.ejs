@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Summary — Books Rating</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <%- include("partials/header", {
+        title: "Community Summary",
+        nav: { summary: true, books: true, me: true, login: true, register: true, logout: true }
+      }) %>
+
+      <% if (error) { %>
+      <div class="alert"><%= error %></div>
+      <% } %>
+
+      <section class="card">
+        <div class="status">
+          <span>Total books: <strong><%= totals.books %></strong></span>
+          <span>Total entries: <strong><%= totals.entries %></strong></span>
+          <span>Active raters: <strong><%= totals.raters %></strong></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Most listed books</h2>
+        <% if (!summary.length) { %>
+        <p>No entries yet.</p>
+        <% } else { %>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Book</th>
+              <th>Entries</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% summary.forEach((item, index) => { %>
+            <tr>
+              <td><%= index + 1 %></td>
+              <td><%= item.title %> — <%= item.author %></td>
+              <td><%= item.entries_count %></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% } %>
+      </section>
+    </main>
+  </body>
+</html>

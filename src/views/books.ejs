@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Books — Books Rating</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <%- include("partials/header", {
+        title: "Books",
+        nav: { summary: true, me: true, login: true, register: true, logout: true }
+      }) %>
+
+      <% if (error) { %>
+      <div class="alert"><%= error %></div>
+      <% } %>
+
+      <% if (message) { %>
+      <div class="alert success"><%= message %></div>
+      <% } %>
+
+      <section class="card">
+        <h2>Search</h2>
+        <form method="get" action="/books" class="row">
+          <input name="q" placeholder="Search by title or author" value="<%= query %>" />
+          <button type="submit">Search</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Add a new book</h2>
+        <% if (!currentUser) { %>
+        <p>You must be logged in to add a book.</p>
+        <% } else { %>
+        <form method="post" action="/books" class="grid">
+          <label>
+            Title
+            <input name="title" required />
+          </label>
+          <label>
+            Author
+            <input name="author" required />
+          </label>
+          <button type="submit">Add book</button>
+        </form>
+        <% } %>
+      </section>
+
+      <section class="card">
+        <h2>Book pool</h2>
+        <% if (!books.length) { %>
+        <p>No books found yet.</p>
+        <% } else { %>
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Author</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% books.forEach((book) => { %>
+            <% const isEditing = editId === book.id; %>
+            <tr>
+              <% if (isEditing) { %>
+              <td>
+                <input
+                  form="fix-<%= book.id %>"
+                  name="title"
+                  value="<%= book.title %>"
+                  required
+                />
+              </td>
+              <td>
+                <input
+                  form="fix-<%= book.id %>"
+                  name="author"
+                  value="<%= book.author %>"
+                  required
+                />
+              </td>
+              <td class="actions">
+                <form id="fix-<%= book.id %>" method="post" action="/books/<%= book.id %>/fix">
+                  <input type="hidden" name="q" value="<%= query %>" />
+                  <button type="submit">Save</button>
+                  <a
+                    class="button secondary"
+                    href="/books<%= query ? `?q=${encodeURIComponent(query)}` : '' %>"
+                    >Cancel</a>
+                </form>
+              </td>
+              <% } else { %>
+              <td><%= book.title %></td>
+              <td><%= book.author %></td>
+              <td class="actions">
+                <a
+                  class="button"
+                  href="/books?edit=<%= book.id %><%= query ? `&q=${encodeURIComponent(query)}` : '' %>"
+                  >Fix</a>
+              </td>
+              <% } %>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+        <% } %>
+      </section>
+    </main>
+  </body>
+</html>
