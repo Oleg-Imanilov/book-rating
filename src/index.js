@@ -1,4 +1,6 @@
 const path = require("path");
+const dotenv = require("dotenv");
+dotenv.config({ path: path.resolve(process.cwd(), ".env.development.local") });
 const express = require("express");
 const session = require("express-session");
 const { openDb, initDb } = require("./db");

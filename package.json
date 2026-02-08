@@ -11,6 +11,7 @@
     "@neondatabase/serverless": "^1.0.2",
     "bcrypt": "^5.1.1",
     "connect-pg-simple": "^10.0.0",
+    "dotenv": "^16.4.7",
     "ejs": "^3.1.10",
     "express": "^4.19.2",
     "express-session": "^1.17.3",
