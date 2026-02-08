@@ -1,8 +1,8 @@
 const path = require("path");
 const express = require("express");
 const session = require("express-session");
-const { openDb, initDb, getDataDir } = require("./db");
-const SQLiteStore = require("connect-sqlite3")(session);
+const { openDb, initDb } = require("./db");
+const PgSession = require("connect-pg-simple")(session);
 const authRoutes = require("./routes/auth");
 const bookRoutes = require("./routes/books");
 const meRoutes = require("./routes/me");
@@ -20,10 +20,11 @@ app.use(express.static(path.join(__dirname, "public")));
 
 app.set("trust proxy", 1);
 
-const sessionStore = new SQLiteStore({
-  dir: getDataDir(),
-  db: "sessions.sqlite",
-  concurrentDB: true
+const db = openDb();
+
+const sessionStore = new PgSession({
+  pool: db,
+  createTableIfMissing: true
 });
 
 app.use(
@@ -66,8 +67,6 @@ app.use((err, req, res, next) => {
 });
 
 const port = process.env.PORT || 3000;
-const db = openDb();
-
 initDb(db)
   .then(() => {
     app.locals.db = db;

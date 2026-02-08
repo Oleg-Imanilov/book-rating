@@ -4,32 +4,17 @@ const router = express.Router();
 
 function all(db, sql, params = []) {
   console.log("SQL ALL", sql, params);
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) return reject(err);
-      resolve(rows);
-    });
-  });
+  return db.query(sql, params).then((result) => result.rows);
 }
 
 function get(db, sql, params = []) {
   console.log("SQL GET", sql, params);
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) return reject(err);
-      resolve(row);
-    });
-  });
+  return db.query(sql, params).then((result) => result.rows[0] || null);
 }
 
 function run(db, sql, params = []) {
   console.log("SQL RUN:", sql, params);
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
-  });
+  return db.query(sql, params);
 }
 
 async function reorderList(db, userId, newOrderIds) {
@@ -37,7 +22,7 @@ async function reorderList(db, userId, newOrderIds) {
 
   const rows = await all(
     db,
-    "SELECT id, user_id, book_id, rank, created_at, updated_at FROM user_books WHERE user_id = ?",
+    "SELECT id, user_id, book_id, rank, created_at, updated_at FROM user_books WHERE user_id = $1",
     [userId]
   );
   const rowMap = new Map(rows.map((row) => [row.id, row]));
@@ -56,12 +41,12 @@ async function reorderList(db, userId, newOrderIds) {
     .filter(Boolean);
 
   try {
-    await run(db, "BEGIN TRANSACTION");
-    await run(db, "DELETE FROM user_books WHERE user_id = ?", [userId]);
+    await run(db, "BEGIN");
+    await run(db, "DELETE FROM user_books WHERE user_id = $1", [userId]);
     for (const row of reordered) {
       await run(
         db,
-        "INSERT INTO user_books (id, user_id, book_id, rank, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO user_books (id, user_id, book_id, rank, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
         [row.id, row.user_id, row.book_id, row.rank, row.created_at, row.updated_at]
       );
     }
@@ -90,7 +75,7 @@ router.get("/me", requireAuth, async (req, res) => {
       `SELECT ub.id, ub.rank, b.title, b.author
        FROM user_books ub
        JOIN books b ON b.id = ub.book_id
-       WHERE ub.user_id = ?
+       WHERE ub.user_id = $1
        ORDER BY ub.rank`,
       [userId]
     );
@@ -100,7 +85,7 @@ router.get("/me", requireAuth, async (req, res) => {
       `SELECT b.id, b.title, b.author
        FROM books b
        LEFT JOIN user_books ub
-         ON ub.book_id = b.id AND ub.user_id = ?
+         ON ub.book_id = b.id AND ub.user_id = $1
        WHERE ub.id IS NULL
        ORDER BY b.title
        LIMIT 100`,
@@ -136,7 +121,7 @@ router.post("/me/list", requireAuth, async (req, res) => {
     const now = new Date().toISOString();
     const existing = await get(
       db,
-      "SELECT id FROM user_books WHERE user_id = ? AND book_id = ?",
+      "SELECT id FROM user_books WHERE user_id = $1 AND book_id = $2",
       [userId, bookId]
     );
     if (existing) {
@@ -145,34 +130,41 @@ router.post("/me/list", requireAuth, async (req, res) => {
 
     const countRow = await get(
       db,
-      "SELECT COUNT(*) as count FROM user_books WHERE user_id = ?",
+      "SELECT COUNT(*) as \"count\" FROM user_books WHERE user_id = $1",
       [userId]
     );
-    const count = countRow ? countRow.count : 0;
+    const count = Number(countRow ? countRow.count : 0);
     if (count >= 10) {
       return res.redirect(`/me?error=${encodeURIComponent("Your list already has 10 books.")}`);
     }
 
     const maxRankRow = await get(
       db,
-      "SELECT MAX(rank) as maxRank FROM user_books WHERE user_id = ?",
+      "SELECT MAX(rank) as \"maxRank\" FROM user_books WHERE user_id = $1",
       [userId]
     );
-    const nextRank = (maxRankRow && maxRankRow.maxRank ? maxRankRow.maxRank : 0) + 1;
+    const nextRank = (maxRankRow && maxRankRow.maxRank ? Number(maxRankRow.maxRank) : 0) + 1;
 
-    await run(db, "BEGIN TRANSACTION");
-    await run(
-      db,
-      `INSERT INTO user_books (user_id, book_id, rank, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(user_id, book_id) DO NOTHING`,
-      [userId, bookId, nextRank, now, now]
-    );
-    await run(db, "COMMIT");
+    const client = await db.connect();
+    try {
+      await run(client, "BEGIN");
+      await run(
+        client,
+        `INSERT INTO user_books (user_id, book_id, rank, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT(user_id, book_id) DO NOTHING`,
+        [userId, bookId, nextRank, now, now]
+      );
+      await run(client, "COMMIT");
+    } catch (err) {
+      await run(client, "ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
 
     return res.redirect(`/me?message=${encodeURIComponent("Added to your list.")}`);
   } catch (err) {
-    await run(db, "ROLLBACK");
     return res.redirect(`/me?error=${encodeURIComponent("Failed to add book to your list.")}`);
   }
 });
@@ -192,67 +184,74 @@ router.post("/me/new-book", requireAuth, async (req, res) => {
 
     const countRow = await get(
       db,
-      "SELECT COUNT(*) as count FROM user_books WHERE user_id = ?",
+      "SELECT COUNT(*) as \"count\" FROM user_books WHERE user_id = $1",
       [userId]
     );
-    const count = countRow ? countRow.count : 0;
+    const count = Number(countRow ? countRow.count : 0);
     if (count >= 10) {
       return res.redirect(`/me?error=${encodeURIComponent("Your list already has 10 books.")}`);
     }
 
-    await run(db, "BEGIN TRANSACTION");
-    const existingBook = await get(
-      db,
-      "SELECT id FROM books WHERE LOWER(title) = LOWER(?) AND LOWER(author) = LOWER(?)",
-      [title, author]
-    );
-
-    if (!existingBook) {
-      await run(
-        db,
-        "INSERT INTO books (title, author, created_by_user_id, created_at) VALUES (?, ?, ?, ?)",
-        [title, author, userId, now]
+    const client = await db.connect();
+    try {
+      await run(client, "BEGIN");
+      const existingBook = await get(
+        client,
+        "SELECT id FROM books WHERE LOWER(title) = LOWER($1) AND LOWER(author) = LOWER($2)",
+        [title, author]
       );
-    }
 
-    const book =
-      existingBook ||
-      (await get(db, "SELECT id FROM books WHERE LOWER(title) = LOWER(?) AND LOWER(author) = LOWER(?)", [
-        title,
-        author
-      ]));
-
-    if (book) {
-      const existingEntry = await get(
-        db,
-        "SELECT id FROM user_books WHERE user_id = ? AND book_id = ?",
-        [userId, book.id]
-      );
-      if (existingEntry) {
-        await run(db, "ROLLBACK");
-        return res.redirect(`/me?message=${encodeURIComponent("That book is already in your list.")}`);
+      if (!existingBook) {
+        await run(
+          client,
+          "INSERT INTO books (title, author, created_by_user_id, created_at) VALUES ($1, $2, $3, $4)",
+          [title, author, userId, now]
+        );
       }
 
-      const maxRankRow = await get(
-        db,
-        "SELECT MAX(rank) as maxRank FROM user_books WHERE user_id = ?",
-        [userId]
-      );
-      const nextRank = (maxRankRow && maxRankRow.maxRank ? maxRankRow.maxRank : 0) + 1;
+      const book =
+        existingBook ||
+        (await get(client, "SELECT id FROM books WHERE LOWER(title) = LOWER($1) AND LOWER(author) = LOWER($2)", [
+          title,
+          author
+        ]));
 
-      await run(
-        db,
-        `INSERT INTO user_books (user_id, book_id, rank, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(user_id, book_id) DO NOTHING`,
-        [userId, book.id, nextRank, now, now]
-      );
+      if (book) {
+        const existingEntry = await get(
+          client,
+          "SELECT id FROM user_books WHERE user_id = $1 AND book_id = $2",
+          [userId, book.id]
+        );
+        if (existingEntry) {
+          await run(client, "ROLLBACK");
+          return res.redirect(`/me?message=${encodeURIComponent("That book is already in your list.")}`);
+        }
+
+        const maxRankRow = await get(
+          client,
+          "SELECT MAX(rank) as \"maxRank\" FROM user_books WHERE user_id = $1",
+          [userId]
+        );
+        const nextRank = (maxRankRow && maxRankRow.maxRank ? Number(maxRankRow.maxRank) : 0) + 1;
+
+        await run(
+          client,
+          `INSERT INTO user_books (user_id, book_id, rank, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT(user_id, book_id) DO NOTHING`,
+          [userId, book.id, nextRank, now, now]
+        );
+      }
+
+      await run(client, "COMMIT");
+    } catch (err) {
+      await run(client, "ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
     }
-
-    await run(db, "COMMIT");
     return res.redirect(`/me?message=${encodeURIComponent("Added to your list.")}`);
   } catch (err) {
-    await run(db, "ROLLBACK");
     return res.redirect(`/me?error=${encodeURIComponent("Failed to add book to your list.")}`);
   }
 });
@@ -268,7 +267,7 @@ router.post("/me/list/:id/up", requireAuth, async (req, res) => {
   try {
     const rows = await all(
       db,
-      "SELECT id FROM user_books WHERE user_id = ? ORDER BY rank",
+      "SELECT id FROM user_books WHERE user_id = $1 ORDER BY rank",
       [userId]
     );
     const ids = rows.map((row) => row.id);
@@ -276,7 +275,12 @@ router.post("/me/list/:id/up", requireAuth, async (req, res) => {
     if (index <= 0) return res.redirect("/me");
 
     [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]];
-    await reorderList(db, userId, ids);
+    const client = await db.connect();
+    try {
+      await reorderList(client, userId, ids);
+    } finally {
+      client.release();
+    }
     return res.redirect("/me");
   } catch (err) {
     return res.redirect("/me");
@@ -293,7 +297,7 @@ router.post("/me/list/:id/down", requireAuth, async (req, res) => {
   try {
     const rows = await all(
       db,
-      "SELECT id FROM user_books WHERE user_id = ? ORDER BY rank",
+      "SELECT id FROM user_books WHERE user_id = $1 ORDER BY rank",
       [userId]
     );
     const ids = rows.map((row) => row.id);
@@ -301,7 +305,12 @@ router.post("/me/list/:id/down", requireAuth, async (req, res) => {
     if (index === -1 || index >= ids.length - 1) return res.redirect("/me");
 
     [ids[index], ids[index + 1]] = [ids[index + 1], ids[index]];
-    await reorderList(db, userId, ids);
+    const client = await db.connect();
+    try {
+      await reorderList(client, userId, ids);
+    } finally {
+      client.release();
+    }
     return res.redirect("/me");
   } catch (err) {
     return res.redirect("/me");
@@ -325,7 +334,7 @@ router.post("/me/list/reorder", requireAuth, async (req, res) => {
   try {
     const rows = await all(
       db,
-      "SELECT id FROM user_books WHERE user_id = ? ORDER BY rank",
+      "SELECT id FROM user_books WHERE user_id = $1 ORDER BY rank",
       [userId]
     );
     const existingIds = rows.map((row) => row.id);
@@ -339,7 +348,12 @@ router.post("/me/list/reorder", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Invalid entries." });
     }
 
-    await reorderList(db, userId, ids);
+    const client = await db.connect();
+    try {
+      await reorderList(client, userId, ids);
+    } finally {
+      client.release();
+    }
     return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ error: "Failed to reorder." });
@@ -354,7 +368,7 @@ router.post("/me/list/:id/delete", requireAuth, async (req, res) => {
   if (!id) return res.redirect("/me");
 
   try {
-    await run(db, "DELETE FROM user_books WHERE id = ? AND user_id = ?", [id, userId]);
+    await run(db, "DELETE FROM user_books WHERE id = $1 AND user_id = $2", [id, userId]);
     return res.redirect("/me");
   } catch (err) {
     return res.redirect("/me");

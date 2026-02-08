@@ -4,22 +4,12 @@ const router = express.Router();
 
 function all(db, sql, params = []) {
   console.log("SQL ALL", sql, params);
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) return reject(err);
-      resolve(rows);
-    });
-  });
+  return db.query(sql, params).then((result) => result.rows);
 }
 
 function get(db, sql, params = []) {
   console.log("SQL GET", sql, params);
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) return reject(err);
-      resolve(row);
-    });
-  });
+  return db.query(sql, params).then((result) => result.rows[0] || null);
 }
 
 async function renderSummary(req, res) {
@@ -40,16 +30,16 @@ async function renderSummary(req, res) {
        ORDER BY rank_score ASC, b.title ASC`
     );
 
-    const totalBooksRow = await get(db, "SELECT COUNT(*) as count FROM books");
-    const totalEntriesRow = await get(db, "SELECT COUNT(*) as count FROM user_books");
-    const totalRatersRow = await get(db, "SELECT COUNT(DISTINCT user_id) as count FROM user_books");
+    const totalBooksRow = await get(db, "SELECT COUNT(*) as \"count\" FROM books");
+    const totalEntriesRow = await get(db, "SELECT COUNT(*) as \"count\" FROM user_books");
+    const totalRatersRow = await get(db, "SELECT COUNT(DISTINCT user_id) as \"count\" FROM user_books");
 
     res.render("summary", {
       summary,
       totals: {
-        books: totalBooksRow ? totalBooksRow.count : 0,
-        entries: totalEntriesRow ? totalEntriesRow.count : 0,
-        raters: totalRatersRow ? totalRatersRow.count : 0
+        books: Number(totalBooksRow ? totalBooksRow.count : 0),
+        entries: Number(totalEntriesRow ? totalEntriesRow.count : 0),
+        raters: Number(totalRatersRow ? totalRatersRow.count : 0)
       },
       error: null
     });

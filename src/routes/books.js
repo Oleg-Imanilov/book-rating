@@ -4,32 +4,17 @@ const router = express.Router();
 
 function all(db, sql, params = []) {
   console.log("SQL ALL", sql, params);
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) return reject(err);
-      resolve(rows);
-    });
-  });
+  return db.query(sql, params).then((result) => result.rows);
 }
 
 function run(db, sql, params = []) {
   console.log("SQL RUN", sql, params);
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
-  });
+  return db.query(sql, params);
 }
 
 function get(db, sql, params = []) {
   console.log("SQL GET", sql, params);
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) return reject(err);
-      resolve(row);
-    });
-  });
+  return db.query(sql, params).then((result) => result.rows[0] || null);
 }
 
 function requireAuth(req, res, next) {
@@ -49,7 +34,7 @@ router.get("/books", async (req, res) => {
     const books = await all(
       db,
       query
-        ? "SELECT id, title, author FROM books WHERE title LIKE ? OR author LIKE ? ORDER BY title"
+        ? "SELECT id, title, author FROM books WHERE title ILIKE $1 OR author ILIKE $2 ORDER BY title"
         : "SELECT id, title, author FROM books ORDER BY title",
       query ? [like, like] : []
     );
@@ -93,7 +78,7 @@ router.post("/books/:id/fix", requireAuth, async (req, res) => {
   try {
     const existing = await get(
       db,
-      "SELECT id FROM books WHERE LOWER(title) = LOWER(?) AND LOWER(author) = LOWER(?) AND id != ?",
+      "SELECT id FROM books WHERE LOWER(title) = LOWER($1) AND LOWER(author) = LOWER($2) AND id != $3",
       [title, author, bookId]
     );
 
@@ -103,12 +88,12 @@ router.post("/books/:id/fix", requireAuth, async (req, res) => {
       );
     }
 
-    const target = await get(db, "SELECT id FROM books WHERE id = ?", [bookId]);
+    const target = await get(db, "SELECT id FROM books WHERE id = $1", [bookId]);
     if (!target) {
       return res.redirect(`/books?error=${encodeURIComponent("Book not found.")}${querySuffix}`);
     }
 
-    await run(db, "UPDATE books SET title = ?, author = ? WHERE id = ?", [title, author, bookId]);
+    await run(db, "UPDATE books SET title = $1, author = $2 WHERE id = $3", [title, author, bookId]);
 
     return res.redirect(`/books?message=${encodeURIComponent("Book updated.")}${querySuffix}`);
   } catch (err) {
@@ -128,7 +113,7 @@ router.post("/books", requireAuth, async (req, res) => {
   try {
     const existing = await get(
       db,
-      "SELECT id FROM books WHERE LOWER(title) = LOWER(?) AND LOWER(author) = LOWER(?)",
+      "SELECT id FROM books WHERE LOWER(title) = LOWER($1) AND LOWER(author) = LOWER($2)",
       [title, author]
     );
 
@@ -139,7 +124,7 @@ router.post("/books", requireAuth, async (req, res) => {
     const now = new Date().toISOString();
     await run(
       db,
-      "INSERT OR IGNORE INTO books (title, author, created_by_user_id, created_at) VALUES (?, ?, ?, ?)",
+      "INSERT INTO books (title, author, created_by_user_id, created_at) VALUES ($1, $2, $3, $4) ON CONFLICT (title, author) DO NOTHING",
       [title, author, req.session.user.id, now]
     );
 

@@ -5,22 +5,12 @@ const router = express.Router();
 
 function run(db, sql, params = []) {
   console.log("SQL RUN", sql, params);
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
-  });
+  return db.query(sql, params);
 }
 
 function get(db, sql, params = []) {
   console.log("SQL GET", sql, params);
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) return reject(err);
-      resolve(row);
-    });
-  });
+  return db.query(sql, params).then((result) => result.rows[0] || null);
 }
 
 router.get("/register", (req, res) => {
@@ -40,7 +30,7 @@ router.post("/register", async (req, res) => {
   }
 
   try {
-    const existing = await get(db, "SELECT id FROM users WHERE username = ?", [username]);
+    const existing = await get(db, "SELECT id FROM users WHERE username = $1", [username]);
     if (existing) {
       return res.render("register", { error: "Username already taken.", username });
     }
@@ -49,11 +39,11 @@ router.post("/register", async (req, res) => {
     const now = new Date().toISOString();
     const result = await run(
       db,
-      "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
+      "INSERT INTO users (username, password_hash, created_at) VALUES ($1, $2, $3) RETURNING id",
       [username, passwordHash, now]
     );
 
-    req.session.user = { id: result.lastID, username };
+    req.session.user = { id: result.rows[0].id, username };
     return res.redirect("/");
   } catch (err) {
     return res.render("register", { error: "Registration failed.", username });
@@ -74,7 +64,7 @@ router.post("/login", async (req, res) => {
   }
 
   try {
-    const user = await get(db, "SELECT id, username, password_hash FROM users WHERE username = ?", [
+    const user = await get(db, "SELECT id, username, password_hash FROM users WHERE username = $1", [
       username
     ]);
 
